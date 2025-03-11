@@ -1,0 +1,25 @@
+### .gitignore:
+```
+# Виртуальное окружение
+.venv/
+venv/
+env/
+.myenv
+
+# Файлы с секретами
+.env
+
+# Python кэш
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Дистрибутивы
+dist/
+build/
+*.egg-info/
+
+# Локальные файлы IDE
+.idea/
+.vscode/
+```
