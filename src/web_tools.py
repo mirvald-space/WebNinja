@@ -15,13 +15,15 @@ load_dotenv()
 DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "30"))
 DEFAULT_HEADERS = ["h1", "h2", "h3"]
 DEFAULT_CONTENT = ["p", "article"]
+DEFAULT_USER_AGENT = os.getenv("USER_AGENT", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
 
 
 class WebBrowser:
     """Class for managing browser and web interactions"""
     
-    def __init__(self, headless: bool = True):
+    def __init__(self, headless: bool = True, user_agent: Optional[str] = None):
         self.headless = headless
+        self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.browser = None
         self.context = None
         self.page = None
@@ -33,10 +35,32 @@ class WebBrowser:
             headless=self.headless,
             args=[
                 "--disable-blink-features=AutomationControlled",
-                "--disable-features=IsolateOrigins,site-per-process"
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage"
             ]
         )
-        self.context = self.browser.new_context()
+        self.context = self.browser.new_context(
+            user_agent=self.user_agent,
+            viewport={"width": 1920, "height": 1080},
+            locale="uk-UA",
+            timezone_id="Europe/Kiev",
+            extra_http_headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "uk,en-US;q=0.7,en;q=0.3",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Pragma": "no-cache",
+                "Cache-Control": "no-cache"
+            }
+        )
         self.page = self.context.new_page()
         return self
     
@@ -106,38 +130,45 @@ class WebBrowser:
         }
     
     def google_search(self, query: str) -> List[str]:
-        """Perform Google search and return results"""
-        # Go to Google
-        self.navigate("https://www.google.com")
-        
-        # Accept cookies if needed
+        """Perform search using DuckDuckGo and return results"""
         try:
-            accept_button = self.page.get_by_role(
-                "button",
-                name="Accept all"
-            )
-            accept_button.click()
-        except Exception:
-            pass
+            print("Navigating to DuckDuckGo...")
+            self.navigate("https://duckduckgo.com/")
             
-        # Perform search
-        self.page.fill('textarea[name="q"]', query)
-        self.page.keyboard.press("Enter")
-        self.page.wait_for_load_state("networkidle")
-        
-        # Extract results
-        results = []
-        for result in self.page.query_selector_all("div.g"):
-            try:
-                link = result.query_selector("a")
-                if link and link.get_attribute("href"):
-                    url = link.get_attribute("href")
-                    if url.startswith("http"):
-                        results.append(url)
-            except Exception:
-                continue
-                
-        return results[:5]  # Return top 5 results
+            print("Waiting for page load...")
+            self.page.wait_for_load_state("networkidle", timeout=60000)
+            
+            print("Looking for search input...")
+            search_input = self.page.wait_for_selector('input[name="q"]', timeout=60000)
+            if not search_input:
+                print("Could not find search input")
+                return []
+            
+            print("Entering search query...")
+            search_input.fill(query)
+            search_input.press("Enter")
+            
+            print("Waiting for search results...")
+            self.page.wait_for_load_state("networkidle", timeout=60000)
+            
+            # Extract results
+            print("Extracting results...")
+            results = []
+            for result in self.page.query_selector_all("article.result"):
+                try:
+                    link = result.query_selector("a.result__a")
+                    if link and link.get_attribute("href"):
+                        url = link.get_attribute("href")
+                        if url.startswith("http"):
+                            results.append(url)
+                except Exception:
+                    continue
+            
+            print(f"Found {len(results)} results")
+            return results[:5]  # Return top 5 results
+        except Exception as e:
+            print(f"Error during search: {str(e)}")
+            return []
     
     def visit_news_site(self, url: str) -> Dict[str, Any]:
         """Visit news site and collect content"""

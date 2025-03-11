@@ -14,7 +14,16 @@ load_dotenv()
 
 # Default values
 DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", "grok")
+DEFAULT_NEWS_SITE = os.getenv("DEFAULT_NEWS_SITE", "https://www.reuters.com/technology")
 
+# Reliable sources for AI and technology research
+RESEARCH_SOURCES = [
+    "https://www.wired.com/tag/artificial-intelligence",
+    "https://www.technologyreview.com/topic/artificial-intelligence",
+    "https://venturebeat.com/category/ai",
+    "https://www.reuters.com/technology",
+    "https://techcrunch.com/category/artificial-intelligence"
+]
 
 class WebAgent:
     """A core class of agent for collecting and analyzing web information"""
@@ -52,7 +61,7 @@ class WebAgent:
         with WebBrowser(headless=self.headless, user_agent=self.user_agent) as browser:
             # Visit news site or determine strategy based on task
             if "news" in task.lower():
-                content = browser.visit_news_site()
+                content = browser.visit_news_site(DEFAULT_NEWS_SITE)
             else:
                 # Search for information on Google
                 results = browser.google_search(task)
@@ -107,34 +116,46 @@ class WebAgent:
         all_content = []
         
         with WebBrowser(headless=self.headless, user_agent=self.user_agent) as browser:
-            # Search for multiple results
-            search_results = browser.google_search(topic)[:depth]
+            # Use predefined sources instead of search
+            print(f"Using {depth} trusted sources for research...")
+            sources = RESEARCH_SOURCES[:depth]
             
-            for url in search_results:
+            for i, url in enumerate(sources, 1):
+                print(f"Processing source {i}/{len(sources)}: {url}")
                 # Check time limit
                 if time.time() - start_time > max_time:
+                    print("Time limit exceeded")
                     all_content.append({
                         "url": "Time limit exceeded",
                         "content": "Research was interrupted due to time limit"
                     })
                     break
                 
-                # Navigate to result page
+                # Navigate to source
+                print(f"Navigating to {url}")
                 if browser.navigate(url):
                     # Extract content
+                    print("Extracting content...")
                     content = browser.extract_content()
                     all_content.append({
                         "url": url,
                         "content": content
                     })
+                else:
+                    print(f"Failed to navigate to {url}")
             
+            print("Preparing research report...")
             # Form system prompt for research
             system_prompt = f"""
-            You are an experienced researcher. Analyze information from multiple sources about "{topic}".
-            Create a structured report including:
-            1. Key facts and data
-            2. Comparison of information from different sources
-            3. Conclusions and findings
+            You are an experienced researcher and technology analyst. Analyze the provided information about "{topic}".
+            Create a structured report in Ukrainian language including:
+            1. Key facts and data about AI in design and product development
+            2. Expert opinions and predictions for 2025
+            3. Current trends and potential impact
+            4. Conclusions and recommendations
+            
+            Base your analysis on the available information, even if it's not directly about the specific question.
+            Extrapolate current trends and developments to make informed predictions about 2025.
             """
             
             # Form user prompt with data from all sources
@@ -162,6 +183,7 @@ class WebAgent:
                 
                 user_prompt += "---\n\n"
             
+            print("Generating final report...")
             # Generate final report
             response = self.llm_provider.generate_response(system_prompt, user_prompt)
             return response
